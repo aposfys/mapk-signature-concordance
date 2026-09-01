@@ -38,3 +38,19 @@ heatmap_top_n: 50
 
 # Size of the ranked signature used for concordance scoring.
 signature_size: 200
+
+# ---------------------------------------------------------------------------
+# Independent check of Tahoe's published pseudobulk statistics.
+# One contrast is re-derived from the raw expression matrix with pyDESeq2:
+# C32 (BRAF-V600E) + vemurafenib 5 uM against plate-matched DMSO controls.
+# Chosen as the strongest-effect, smallest-cell-count C32 contrast.
+# ---------------------------------------------------------------------------
+validation:
+  plate: plate3
+  cell_line: C32
+  cell_line_id: CVCL_1097
+  drug: Vemurafenib
+  concentration: 5.0
+  treated_samples: ["smp_1707"]
+  control_samples: ["smp_1781", "smp_1782"]
+  n_pseudoreps: 3

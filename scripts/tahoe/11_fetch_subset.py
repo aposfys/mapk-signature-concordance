@@ -68,7 +68,7 @@ def main() -> None:
                 f"""SELECT * FROM read_parquet('{local}')
                     WHERE drug IN ({drug_list})
                       AND Cell_Name_Vevo IN ({cell_list})"""
-            ).fetch_arrow_table()
+            ).to_arrow_table()
             Path(local).unlink(missing_ok=True)  # free disk before next shard
 
             if tbl.num_rows:

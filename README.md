@@ -36,6 +36,11 @@ transcriptional response (r = −0.16, p = 0.49).
 
 ![concordance](docs/figures/concordance.png)
 
+Tahoe's published statistics are not taken on trust: one contrast was rebuilt
+from the raw 337 GB expression matrix and re-tested with pyDESeq2, recovering
+their fold changes at **r = 0.968** with 100% sign agreement on significant
+genes, from a cell extraction that matches their control count exactly.
+
 The Tahoe pseudobulk table is 89 GB and the machine had 104 GB free. Because the
 shards are clustered by cell line, parquet footers alone locate the 82 relevant
 ones without reading row data; those stream through one at a time (~7 GB) and are

@@ -9,6 +9,7 @@ PY_ENV = "envs/python-tahoe.yaml"
 MICRO = "results/microarray"
 TAHOE = "results/tahoe"
 CMP = "results/comparison"
+VAL = "results/validation"
 
 
 rule all:
@@ -34,6 +35,9 @@ rule all:
         f"{CMP}/tf_activity.tsv",
         f"{CMP}/figures/progeny_activity.png",
         f"{CMP}/figures/tf_activity.png",
+        # -- independent check of Tahoe's published statistics ----------------
+        f"{VAL}/deseq2_concordance.tsv",
+        f"{VAL}/figures/deseq2_validation.png",
 
 
 # ===========================================================================
@@ -239,3 +243,48 @@ rule pathway_activity:
         "python scripts/tahoe/14_pathway_activity.py {input.micro} {input.tahoe}"
         " {input.config} {output.tsv} {output.tf_tsv} {output.progeny}"
         " {output.tf} > {log} 2>&1"
+
+
+# ===========================================================================
+# Validation — are Tahoe's published pseudobulk statistics reproducible?
+# ===========================================================================
+
+rule validate_fetch_counts:
+    """Rebuild one contrast's pseudobulk counts from Tahoe's raw cells.
+
+    The raw matrix is 337 GB clustered by plate, and row groups interleave cell
+    lines so pushdown cannot skip them; one plate (~15 GB) is the smallest unit
+    that can be scanned. Shards stream one at a time and are deleted after
+    filtering."""
+    input:
+        config="config/config.yaml",
+    output:
+        counts=f"{VAL}/raw_counts.tsv",
+    params:
+        n_reps=config["validation"]["n_pseudoreps"],
+    log:
+        "logs/validate_fetch_counts.log",
+    conda:
+        PY_ENV
+    shell:
+        "python scripts/tahoe/15_fetch_raw_counts.py {input.config} {output.counts}"
+        " {params.n_reps} > {log} 2>&1"
+
+
+rule validate_deseq2:
+    """Run pyDESeq2 on the rebuilt counts and compare to Tahoe's published
+    log2 fold changes for the same contrast."""
+    input:
+        counts=f"{VAL}/raw_counts.tsv",
+        tahoe=f"{TAHOE}/mapk_de.parquet",
+        config="config/config.yaml",
+    output:
+        tsv=f"{VAL}/deseq2_concordance.tsv",
+        png=f"{VAL}/figures/deseq2_validation.png",
+    log:
+        "logs/validate_deseq2.log",
+    conda:
+        PY_ENV
+    shell:
+        "python scripts/tahoe/16_validate_deseq2.py {input.counts} {input.tahoe}"
+        " {input.config} {output.tsv} {output.png} > {log} 2>&1"

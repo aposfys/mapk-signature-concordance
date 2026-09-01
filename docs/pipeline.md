@@ -73,6 +73,7 @@ than 7 GB.
 | Concordance | `tahoe/12` | Spearman rho vs reference signature, empirical null from 2000 size-matched random gene sets |
 | Drug class | `tahoe/13` | drug × drug Spearman over pseudobulk log2FC; Tanimoto similarity over Morgan fingerprints (RDKit) from Tahoe SMILES |
 | Pathway activity | `tahoe/14` | decoupler 2.2 univariate linear model over PROGENy footprints and CollecTRI regulons |
+| Validation | `tahoe/15–16` | one contrast rebuilt from raw cells, pseudo-replicated, re-tested with pyDESeq2 against Tahoe's published values |
 
 **Why limma for the array and DESeq2 for Tahoe.** These are not
 interchangeable. DESeq2 models raw counts with a negative binomial
@@ -87,6 +88,26 @@ signed pathway activity from footprint genes trained on perturbation
 experiments, so MAPK activity is directly readable and comparable across
 platforms. Scoring the array contrast and the single-cell contrasts on the same
 footprints puts both technologies on one axis.
+
+## Checking the published statistics
+
+Every Tahoe number used here comes from their precomputed pseudobulk table. To
+avoid taking that on trust, one contrast — C32 + vemurafenib 5 µM, the
+strongest-effect and smallest C32 condition — is rebuilt from the raw expression
+matrix and re-tested independently.
+
+The raw table is 337 GB over 3388 shards and is clustered by *plate*, not cell
+line; row groups interleave cell lines, so predicate pushdown cannot skip them.
+One plate is therefore the smallest scannable unit. `15_fetch_raw_counts.py`
+locates plate3 by footer reads (147 shards, ~15 GB), streams them one at a time,
+keeps only C32 cells from the treated and plate-matched DMSO samples, and deletes
+each shard before the next.
+
+DESeq2 needs within-group replication to estimate dispersion, and the contrast is
+one treated sample against two controls, so cells are split into three
+pseudo-replicates per group. This approximates Tahoe's own aggregation rather
+than reproducing it exactly, which is why agreement is assessed by correlation
+rather than by identity.
 
 ## A note on the TF-activity result
 
@@ -112,9 +133,11 @@ inference discriminates and TF-regulon inference does not.
   The negative control bounds this: whatever is shared by all melanoma lines
   should appear in SK-MEL-2 too, so signal specific to the BRAF-mutant arm is
   unlikely to be generic.
-- Tahoe pseudobulk DE is taken as published, not recomputed. Re-deriving it from
-  the 337 GB expression matrix would allow validating their DESeq2 run, but only
-  one cell line at a time fits locally.
+- Tahoe pseudobulk DE is used as published for all but one contrast, which was
+  re-derived from raw cells and reproduced it (r = 0.968 on Tahoe-significant
+  genes; see [RESULTS.md](RESULTS.md#tahoes-published-statistics-reproduce)).
+  The other contrasts are not individually verified — each would cost another
+  ~15 GB plate scan.
 - Concentrations differ between the two sources; the highest available Tahoe
   concentration is used, which is not dose-matched to GSE42872's 10 µM.
 

@@ -69,6 +69,31 @@ the array reference, is suppressed about equally regardless of genotype (−2.64
 BRAF-V600E vs −2.06 in NRAS under RAF inhibition). See the method-choice note in
 [pipeline.md](pipeline.md#a-note-on-the-tf-activity-result).
 
+## Tahoe's published statistics reproduce
+
+Every Tahoe number in this project comes from their precomputed pseudobulk table.
+One contrast — C32 + vemurafenib 5 µM — was rebuilt from the raw expression
+matrix (147 plate-3 shards, ~15 GB streamed) and re-tested with pyDESeq2.
+
+The cell extraction lands on Tahoe's own counts: **1,407 control cells, exactly
+matching** their reported `n_cells_ctrl`, and 1,448 treated against their 1,462
+(within 1%).
+
+| Gene set | n | Pearson r | Spearman rho | Sign agreement |
+|---|---|---|---|---|
+| All comparable genes | 24,586 | 0.814 | 0.820 | 84.6% |
+| Tahoe-significant | 1,404 | **0.968** | **0.970** | **100.0%** |
+
+On the genes Tahoe calls significant, an independent rerun from raw cells
+recovers their fold changes at r = 0.968 and agrees on the direction of every
+single one. The weaker all-genes figure is expected: most of the transcriptome is
+noise near zero, where the pseudo-replicate split and shrinkage differences
+scatter freely — visible as the grey cloud below.
+
+![deseq2 validation](figures/deseq2_validation.png)
+
+Only this contrast is verified; each additional one costs another plate scan.
+
 ## Reference arm
 
 The microarray arm reproduces exactly across runs: 33,297 probes tested, 701 up
