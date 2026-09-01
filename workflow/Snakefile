@@ -1,29 +1,45 @@
 configfile: "config/config.yaml"
 
+# Reference arm (R/Bioconductor) runs with the host R install by default; pass
+# --use-conda to provision workflow/envs/r-microarray.yaml instead. The Tahoe
+# arm is pure Python and uses whichever interpreter invokes Snakemake.
+R_ENV = "envs/r-microarray.yaml"
+PY_ENV = "envs/python-tahoe.yaml"
 
-# Rules run with the host R installation by default; pass --use-conda to
-# provision the pinned environment in workflow/envs/r-microarray.yaml instead.
-ENV = "envs/r-microarray.yaml"
+MICRO = "results/microarray"
+TAHOE = "results/tahoe"
+CMP = "results/comparison"
 
 
 rule all:
     input:
-        "results/qc/boxplot_raw.png",
-        "results/qc/nuse.png",
-        "results/qc/rle.png",
-        "results/figures/boxplot_normalized.png",
-        "results/figures/pca.png",
-        "results/dea/dea_full.tsv",
-        "results/dea/dea_significant.tsv",
-        "results/figures/volcano.png",
-        "results/figures/sample_dendrogram.png",
-        "results/clustering/samples.nwk",
-        "results/figures/heatmap_top_degs.png",
-        "results/enrichment/go_bp.tsv",
-        "results/enrichment/kegg.tsv",
+        # -- reference arm: bulk microarray, GSE42872 -------------------------
+        f"{MICRO}/qc/boxplot_raw.png",
+        f"{MICRO}/qc/nuse.png",
+        f"{MICRO}/qc/rle.png",
+        f"{MICRO}/figures/pca.png",
+        f"{MICRO}/dea/dea_full.tsv",
+        f"{MICRO}/figures/volcano.png",
+        f"{MICRO}/clustering/samples.nwk",
+        f"{MICRO}/figures/heatmap_top_degs.png",
+        # -- test arm: Tahoe-100M single-cell perturbation atlas --------------
+        f"{TAHOE}/mapk_de.parquet",
+        # -- cross-platform comparison ---------------------------------------
+        f"{CMP}/signature_concordance.tsv",
+        f"{CMP}/figures/concordance.png",
+        f"{CMP}/drug_similarity.tsv",
+        f"{CMP}/figures/drug_similarity_heatmap.png",
+        f"{CMP}/figures/structure_vs_response.png",
+        f"{CMP}/pathway_activity.tsv",
+        f"{CMP}/figures/progeny_activity.png",
+        f"{CMP}/figures/tf_activity.png",
 
 
-rule download:
+# ===========================================================================
+# Reference arm — bulk Affymetrix microarray (2013), limma
+# ===========================================================================
+
+rule micro_download:
     """Fetch raw CEL files and sample metadata from GEO; assign groups."""
     output:
         samples="data/meta/samples.tsv",
@@ -33,111 +49,190 @@ rule download:
         case=config["contrast"]["case_regex"],
         control=config["contrast"]["control_regex"],
     log:
-        "logs/download.log",
+        "logs/micro_download.log",
     conda:
-        ENV
+        R_ENV
     shell:
-        "Rscript scripts/01_download.R {params.gse} data/raw {output.samples}"
-        " '{params.case}' '{params.control}' > {log} 2>&1"
+        "Rscript scripts/microarray/01_download.R {params.gse} data/raw"
+        " {output.samples} '{params.case}' '{params.control}' > {log} 2>&1"
 
 
-rule qc_raw:
+rule micro_qc:
     """Probe-level QC on raw arrays: intensity boxplot, NUSE and RLE."""
     input:
         samples="data/meta/samples.tsv",
         done="data/raw/.download_done",
     output:
-        boxplot="results/qc/boxplot_raw.png",
-        nuse="results/qc/nuse.png",
-        rle="results/qc/rle.png",
+        boxplot=f"{MICRO}/qc/boxplot_raw.png",
+        nuse=f"{MICRO}/qc/nuse.png",
+        rle=f"{MICRO}/qc/rle.png",
     log:
-        "logs/qc_raw.log",
+        "logs/micro_qc.log",
     conda:
-        ENV
+        R_ENV
     shell:
-        "Rscript scripts/02_qc_raw.R {input.samples} results/qc > {log} 2>&1"
+        f"Rscript scripts/microarray/02_qc_raw.R {{input.samples}} {MICRO}/qc"
+        " > {log} 2>&1"
 
 
-rule normalize:
-    """RMA (background correction + quantile normalization + summarization)."""
+rule micro_normalize:
+    """RMA: background correction, quantile normalization, summarization."""
     input:
         samples="data/meta/samples.tsv",
         done="data/raw/.download_done",
     output:
-        expr="results/normalized/expression_matrix.tsv",
-        boxplot="results/figures/boxplot_normalized.png",
-        pca="results/figures/pca.png",
+        expr=f"{MICRO}/normalized/expression_matrix.tsv",
+        boxplot=f"{MICRO}/figures/boxplot_normalized.png",
+        pca=f"{MICRO}/figures/pca.png",
     log:
-        "logs/normalize.log",
+        "logs/micro_normalize.log",
     conda:
-        ENV
+        R_ENV
     shell:
-        "Rscript scripts/03_normalize.R {input.samples} {output.expr}"
+        "Rscript scripts/microarray/03_normalize.R {input.samples} {output.expr}"
         " {output.boxplot} {output.pca} > {log} 2>&1"
 
 
-rule dea:
-    """limma moderated t-tests with BH correction; annotated results + volcano."""
+rule micro_dea:
+    """limma moderated t-tests with BH correction; annotated results."""
     input:
-        expr="results/normalized/expression_matrix.tsv",
+        expr=f"{MICRO}/normalized/expression_matrix.tsv",
         samples="data/meta/samples.tsv",
     output:
-        full="results/dea/dea_full.tsv",
-        sig="results/dea/dea_significant.tsv",
-        volcano="results/figures/volcano.png",
+        full=f"{MICRO}/dea/dea_full.tsv",
+        sig=f"{MICRO}/dea/dea_significant.tsv",
+        volcano=f"{MICRO}/figures/volcano.png",
     params:
         annotation=config["annotation_pkg"],
         adj_p=config["adj_p"],
         lfc=config["lfc"],
     log:
-        "logs/dea.log",
+        "logs/micro_dea.log",
     conda:
-        ENV
+        R_ENV
     shell:
-        "Rscript scripts/04_dea.R {input.expr} {input.samples} {params.annotation}"
-        " {params.adj_p} {params.lfc} {output.full} {output.sig} {output.volcano}"
-        " > {log} 2>&1"
+        "Rscript scripts/microarray/04_dea.R {input.expr} {input.samples}"
+        " {params.annotation} {params.adj_p} {params.lfc} {output.full}"
+        " {output.sig} {output.volcano} > {log} 2>&1"
 
 
-rule clustering:
-    """Sample dendrogram (Pearson distance, Newick export) + top-DEG heatmap."""
+rule micro_clustering:
+    """Sample dendrogram (Pearson distance, Newick) + top-DEG heatmap."""
     input:
-        expr="results/normalized/expression_matrix.tsv",
+        expr=f"{MICRO}/normalized/expression_matrix.tsv",
         samples="data/meta/samples.tsv",
-        dea="results/dea/dea_full.tsv",
+        dea=f"{MICRO}/dea/dea_full.tsv",
     output:
-        dendrogram="results/figures/sample_dendrogram.png",
-        newick="results/clustering/samples.nwk",
-        heatmap="results/figures/heatmap_top_degs.png",
+        dendrogram=f"{MICRO}/figures/sample_dendrogram.png",
+        newick=f"{MICRO}/clustering/samples.nwk",
+        heatmap=f"{MICRO}/figures/heatmap_top_degs.png",
     params:
         top_n=config["heatmap_top_n"],
     log:
-        "logs/clustering.log",
+        "logs/micro_clustering.log",
     conda:
-        ENV
+        R_ENV
     shell:
-        "Rscript scripts/05_clustering.R {input.expr} {input.samples} {input.dea}"
-        " {params.top_n} {output.dendrogram} {output.newick} {output.heatmap}"
-        " > {log} 2>&1"
+        "Rscript scripts/microarray/05_clustering.R {input.expr} {input.samples}"
+        " {input.dea} {params.top_n} {output.dendrogram} {output.newick}"
+        " {output.heatmap} > {log} 2>&1"
 
 
-rule enrichment:
-    """GO/KEGG over-representation analysis of significant DEGs."""
+# ===========================================================================
+# Test arm — Tahoe-100M (2025), 100M cells / 1,100 drugs
+# ===========================================================================
+
+rule tahoe_map_shards:
+    """Locate which of the 1026 pseudobulk shards hold the melanoma lines.
+
+    Reads parquet footers only, so this costs kilobytes rather than the 89 GB
+    the full table would."""
     input:
-        dea="results/dea/dea_full.tsv",
+        config="config/config.yaml",
     output:
-        go="results/enrichment/go_bp.tsv",
-        kegg="results/enrichment/kegg.tsv",
-        go_plot="results/figures/go_bp_dotplot.png",
-        kegg_plot="results/figures/kegg_dotplot.png",
-    params:
-        adj_p=config["adj_p"],
-        lfc=config["lfc"],
+        shard_map="data/meta/tahoe_shard_map.json",
     log:
-        "logs/enrichment.log",
+        "logs/tahoe_map_shards.log",
     conda:
-        ENV
+        PY_ENV
     shell:
-        "Rscript scripts/06_enrichment.R {input.dea} {params.adj_p} {params.lfc}"
-        " {output.go} {output.kegg} {output.go_plot} {output.kegg_plot}"
-        " > {log} 2>&1"
+        "python scripts/tahoe/10_map_shards.py {input.config} {output.shard_map}"
+        " 8 4 > {log} 2>&1"
+
+
+rule tahoe_fetch:
+    """Download only the mapped shards, filter to MAPK-pathway drugs, and
+    delete each shard before the next -- peak disk stays ~90 MB."""
+    input:
+        shard_map="data/meta/tahoe_shard_map.json",
+        config="config/config.yaml",
+    output:
+        parquet=f"{TAHOE}/mapk_de.parquet",
+    log:
+        "logs/tahoe_fetch.log",
+    conda:
+        PY_ENV
+    shell:
+        "python scripts/tahoe/11_fetch_subset.py {input.shard_map} {input.config}"
+        " {output.parquet} > {log} 2>&1"
+
+
+# ===========================================================================
+# Cross-platform comparison
+# ===========================================================================
+
+rule signature_concordance:
+    """Does the 2013 A375 array signature replicate in 2025 single-cell data,
+    in BRAF-V600E lines but not in the NRAS-mutant control?"""
+    input:
+        micro=f"{MICRO}/dea/dea_full.tsv",
+        tahoe=f"{TAHOE}/mapk_de.parquet",
+        config="config/config.yaml",
+    output:
+        tsv=f"{CMP}/signature_concordance.tsv",
+        png=f"{CMP}/figures/concordance.png",
+    log:
+        "logs/signature_concordance.log",
+    conda:
+        PY_ENV
+    shell:
+        "python scripts/tahoe/12_signature_compare.py {input.micro} {input.tahoe}"
+        " {input.config} {output.tsv} {output.png} > {log} 2>&1"
+
+
+rule drug_class:
+    """Do RAF and MEK inhibitors separate transcriptomically, and does chemical
+    similarity predict transcriptomic similarity?"""
+    input:
+        tahoe=f"{TAHOE}/mapk_de.parquet",
+        config="config/config.yaml",
+    output:
+        tsv=f"{CMP}/drug_similarity.tsv",
+        heatmap=f"{CMP}/figures/drug_similarity_heatmap.png",
+        scatter=f"{CMP}/figures/structure_vs_response.png",
+    log:
+        "logs/drug_class.log",
+    conda:
+        PY_ENV
+    shell:
+        "python scripts/tahoe/13_drug_class.py {input.tahoe} {input.config}"
+        " {output.tsv} {output.heatmap} {output.scatter} > {log} 2>&1"
+
+
+rule pathway_activity:
+    """Score both platforms on the same PROGENy / CollecTRI footprints."""
+    input:
+        micro=f"{MICRO}/dea/dea_full.tsv",
+        tahoe=f"{TAHOE}/mapk_de.parquet",
+        config="config/config.yaml",
+    output:
+        tsv=f"{CMP}/pathway_activity.tsv",
+        progeny=f"{CMP}/figures/progeny_activity.png",
+        tf=f"{CMP}/figures/tf_activity.png",
+    log:
+        "logs/pathway_activity.log",
+    conda:
+        PY_ENV
+    shell:
+        "python scripts/tahoe/14_pathway_activity.py {input.micro} {input.tahoe}"
+        " {input.config} {output.tsv} {output.progeny} {output.tf} > {log} 2>&1"

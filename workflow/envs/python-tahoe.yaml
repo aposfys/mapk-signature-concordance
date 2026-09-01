@@ -1,0 +1,19 @@
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pyarrow
+  - duckdb
+  - pandas
+  - numpy
+  - scipy
+  - matplotlib
+  - pyyaml
+  - rdkit
+  - pip:
+      - huggingface_hub
+      - decoupler>=2.2
+      - scanpy
+      - anndata
+      - pydeseq2

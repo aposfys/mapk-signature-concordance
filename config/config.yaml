@@ -1,20 +1,40 @@
-# Dataset: vemurafenib (PLX4032) vs vehicle-treated A375 melanoma cells,
-# Affymetrix Human Gene 1.0 ST, 3 vs 3 biological replicates.
+# ---------------------------------------------------------------------------
+# Reference arm: bulk microarray, 2013.
+# A375 (BRAF-V600E melanoma), vemurafenib vs vehicle, 3v3, HuGene 1.0 ST.
+# ---------------------------------------------------------------------------
 geo_series: GSE42872
-
-# Bioconductor annotation package matching the array platform (GPL6244).
 annotation_pkg: hugene10sttranscriptcluster.db
-
-# Sample grouping: regexes matched (case-insensitively) against the GEO
-# sample title + characteristics fields.
 contrast:
   name: vemurafenib_vs_control
   case_regex: "vemurafenib|PLX4032|PLX-4032"
   control_regex: "control|vehicle|DMSO"
 
-# Differential-expression thresholds.
+# ---------------------------------------------------------------------------
+# Test arm: Tahoe-100M single-cell perturbation atlas, 2025.
+# Precomputed pseudobulk DESeq2 statistics, clustered one cell line per shard.
+# ---------------------------------------------------------------------------
+tahoe:
+  repo: tahoebio/Tahoe-100M
+
+  # Positive controls: BRAF-V600E/Het melanoma, matching A375's driver genotype.
+  # The 2013 A375 signature should replicate here.
+  # (Hs 695T is BRAF-V600E in the cell-line table but carries no perturbation
+  # data in the pseudobulk release, so it cannot be used.)
+  braf_mutant_lines: ["C32", "LOX-IMVI", "RPMI-7951"]
+
+  # Negative control: NRAS-Q61R, BRAF wild-type melanoma. RAF inhibitors are
+  # known to fail in RAS-mutant cells, so the signature should NOT replicate.
+  # Without this arm, concordance in the mutant lines proves little.
+  braf_wildtype_lines: ["SK-MEL-2"]
+
+  # Two chemically distinct classes hitting the same pathway at adjacent nodes.
+  raf_inhibitors: ["Vemurafenib", "Dabrafenib", "Encorafenib"]
+  mek_inhibitors: ["Trametinib", "Cobimetinib", "Binimetinib", "TAK-733"]
+
+# Statistical thresholds, shared by both arms.
 adj_p: 0.05
 lfc: 1.0
-
-# Number of top DEGs shown in the clustered heatmap.
 heatmap_top_n: 50
+
+# Size of the ranked signature used for concordance scoring.
+signature_size: 200

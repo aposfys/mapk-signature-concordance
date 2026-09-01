@@ -9,7 +9,5 @@ dependencies:
   - bioconductor-limma
   - bioconductor-oligo
   - bioconductor-geoquery
-  - bioconductor-clusterprofiler
-  - bioconductor-org.hs.eg.db
   - bioconductor-pd.hugene.1.0.st.v1
   - bioconductor-hugene10sttranscriptcluster.db

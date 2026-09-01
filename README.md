@@ -1,44 +1,93 @@
-# Microarray Compass
+# MAPK signature concordance
 
-Reproducible microarray differential-expression pipeline: raw Affymetrix CEL
-files from GEO → probe-level QC → RMA normalization → limma DE analysis →
-clustering → GO/KEGG enrichment, orchestrated with Snakemake.
+Does a drug signature derived from bulk microarrays in 2013 still hold when
+measured by single-cell sequencing in 2025 — and does it fail where the biology
+says it must?
 
-Ships configured for [GSE42872](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE42872)
-(vemurafenib vs vehicle in A375 melanoma, 3 vs 3, Human Gene 1.0 ST) and
-recovers the expected biology: MAPK feedback genes (*DUSP6*, *SPRY2*) down,
-melanocyte differentiation markers (*CD36*, *DCT*) up, enrichment dominated by
-cell-cycle shutdown. Any two-group Affymetrix series works via
-[config/config.yaml](config/config.yaml).
+This pipeline derives a vemurafenib response signature from
+[GSE42872](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE42872) (A375
+melanoma, BRAF-V600E, Affymetrix arrays, 2013) and tests it against
+[Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M) (100M single
+cells, 1,100+ drugs, released 2025), across four melanoma lines and seven
+MAPK-pathway inhibitors.
 
-## Quickstart
+## The design
 
-```bash
-Rscript scripts/install_deps.R          # R >= 4.5, Bioconductor packages
-pip install snakemake
-snakemake --cores 4                     # downloads data from GEO, runs all stages
-```
+The point is not to show two vemurafenib experiments agree — any two drug
+treatments share stress and cell-cycle responses, so correlation alone proves
+nothing. The design includes an arm where the signature is **expected to fail**.
 
-Or skip the R setup entirely and let Snakemake provision the pinned
-environment in [workflow/envs/r-microarray.yaml](workflow/envs/r-microarray.yaml):
+| Arm | Lines | Driver | Expectation |
+|---|---|---|---|
+| Reference | A375 (array) | BRAF V600E | defines the signature |
+| Positive | C32, LOX-IMVI, RPMI-7951 | BRAF V600E | replicates |
+| Negative | SK-MEL-2 | NRAS Q61R, BRAF WT | does **not** replicate |
 
-```bash
-snakemake --cores 4 --use-conda
-```
+All four are skin melanoma, so tissue is held constant and only driver genotype
+varies. MEK inhibitors act *downstream* of RAS and so should work in every line
+regardless of BRAF status — making them an internal positive control that proves
+the readout is sensitive in SK-MEL-2, rather than merely blind.
 
-Outputs land in `results/`: QC plots (NUSE/RLE), the expression matrix,
-annotated DE tables, volcano/PCA/heatmap/dendrogram figures (plus the sample
-tree in Newick), and enrichment tables with dotplots. Per-rule logs go to
-`logs/`.
+## Results
 
-A full run on 6 arrays takes about 90 seconds on an M-series laptop and
-yields 1,305 differentially expressed probes (701 up, 604 down at
-|log2FC| ≥ 1, FDR ≤ 0.05), 366 enriched GO BP terms, and 13 KEGG pathways
-led by cell cycle (hsa04110) and DNA replication (hsa03030).
+**The signature replicates, dose-dependently, and only on target.** At the
+highest dose, concordance with the 2013 array signature is `rho = 0.300` across
+BRAF-V600E lines but `0.104` in the NRAS control. Vemurafenib concordance climbs
+monotonically with dose in every mutant line and *falls* at top dose in
+SK-MEL-2:
 
-| PCA | Volcano | Top DEGs |
+| Line | Genotype | 0.05 µM | 0.5 µM | 5 µM |
+|---|---|---|---|---|
+| C32 | BRAF-V600E | +0.005 | +0.287 | **+0.421** |
+| LOX-IMVI | BRAF-V600E | +0.179 | +0.225 | **+0.334** |
+| RPMI-7951 | BRAF-V600E | +0.094 | +0.063 | **+0.237** |
+| SK-MEL-2 | NRAS, BRAF-WT | +0.214 | +0.356 | **+0.104** |
+
+![concordance](docs/figures/concordance.png)
+
+**Pathway activity recovers the pharmacology exactly.** Scoring both platforms on
+the same PROGENy footprints puts a 2013 array and 2025 single-cell data on one
+axis. MEK inhibitors suppress MAPK in both genotypes; RAF inhibitors only in the
+mutant lines, and essentially not at all in NRAS:
+
+| Drug class | BRAF-V600E | BRAF-WT (NRAS) |
 |---|---|---|
-| ![PCA](docs/figures/pca.png) | ![Volcano](docs/figures/volcano.png) | ![Heatmap](docs/figures/heatmap_top_degs.png) |
+| MEK inhibitor | −14.40 | −20.39 |
+| RAF inhibitor | −4.77 | **−0.79** |
 
-Methods, rationale, and how to point it at another dataset:
-[docs/pipeline.md](docs/pipeline.md).
+The array reference itself scores −38.90. That the MEK arm works in SK-MEL-2 is
+what licenses the conclusion that the RAF arm's failure there is target
+dependency rather than an insensitive assay.
+
+![pathway activity](docs/figures/progeny_activity.png)
+
+**Chemical structure does not predict transcriptional response.** Across the
+seven inhibitors, within-class transcriptomic similarity (0.241) is
+indistinguishable from between-class (0.230), and Tanimoto similarity over
+Morgan fingerprints is uncorrelated with response similarity (r = −0.16,
+p = 0.49). Structurally unrelated molecules converging on one pathway produce
+the same downstream signature — pathway position dominates chemistry. This is a
+negative result, and it is consistent with published findings that perturbation
+prediction models struggle to beat simple baselines.
+
+## Getting 7 GB out of 89 GB
+
+Tahoe's pseudobulk table is 89 GB over 1026 shards and its expression matrix is
+337 GB; neither fits in the 104 GB available. But the table is *clustered by cell
+line*. `10_map_shards.py` reads parquet footers only — kilobytes, not gigabytes —
+probing every 8th shard and walking outward to find run boundaries, resolving the
+four melanoma lines to 82 shards. `11_fetch_subset.py` then downloads one shard
+at a time, filters to the seven drugs, and deletes it before the next, so peak
+disk stays near 90 MB. Final working set: **66 MB**.
+
+## Run it
+
+```bash
+Rscript scripts/microarray/install_deps.R   # R >= 4.5, Bioconductor
+pip install -r requirements.txt
+snakemake --cores 4
+```
+
+Or let Snakemake provision both environments itself with `--use-conda`.
+
+Methods, rationale, and limitations: [docs/pipeline.md](docs/pipeline.md).

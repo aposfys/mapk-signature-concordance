@@ -6,7 +6,7 @@ options(repos = c(CRAN = "https://cloud.r-project.org"), timeout = 600)
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
-pkgs <- c("limma", "oligo", "GEOquery", "clusterProfiler", "org.Hs.eg.db",
+pkgs <- c("limma", "oligo", "GEOquery",
           "pd.hugene.1.0.st.v1", "hugene10sttranscriptcluster.db",
           "pheatmap", "ggplot2", "ggrepel")
 BiocManager::install(pkgs, update = FALSE, ask = FALSE)
