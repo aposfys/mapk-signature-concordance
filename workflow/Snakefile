@@ -31,6 +31,7 @@ rule all:
         f"{CMP}/figures/drug_similarity_heatmap.png",
         f"{CMP}/figures/structure_vs_response.png",
         f"{CMP}/pathway_activity.tsv",
+        f"{CMP}/tf_activity.tsv",
         f"{CMP}/figures/progeny_activity.png",
         f"{CMP}/figures/tf_activity.png",
 
@@ -227,6 +228,7 @@ rule pathway_activity:
         config="config/config.yaml",
     output:
         tsv=f"{CMP}/pathway_activity.tsv",
+        tf_tsv=f"{CMP}/tf_activity.tsv",
         progeny=f"{CMP}/figures/progeny_activity.png",
         tf=f"{CMP}/figures/tf_activity.png",
     log:
@@ -235,4 +237,5 @@ rule pathway_activity:
         PY_ENV
     shell:
         "python scripts/tahoe/14_pathway_activity.py {input.micro} {input.tahoe}"
-        " {input.config} {output.tsv} {output.progeny} {output.tf} > {log} 2>&1"
+        " {input.config} {output.tsv} {output.tf_tsv} {output.progeny}"
+        " {output.tf} > {log} 2>&1"

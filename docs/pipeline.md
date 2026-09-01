@@ -88,6 +88,23 @@ experiments, so MAPK activity is directly readable and comparable across
 platforms. Scoring the array contrast and the single-cell contrasts on the same
 footprints puts both technologies on one axis.
 
+## A note on the TF-activity result
+
+Transcription-factor activity (CollecTRI, with DoRothEA as fallback when
+Zenodo is unavailable) is computed and saved, but it does **not** reproduce the
+genotype specificity that PROGENy shows. ETV4 — a direct ERK-driven factor and
+one of the strongest hits in the array reference — is suppressed to a similar
+degree regardless of genotype (median −2.64 in BRAF-V600E vs −2.06 in NRAS under
+RAF inhibition), and ETV5 and MYC show no clean pattern either.
+
+This is reported rather than dropped because it is informative about method
+choice. PROGENy footprints are fitted on perturbation experiments, so they
+capture the downstream consequence of pathway inhibition directly; TF regulons
+describe binding relationships, and the resulting ULM statistics here are an
+order of magnitude smaller (≈ −2 to −3, against −38 to −0.79 for PROGENy MAPK)
+and correspondingly noisier. For this question, footprint-based pathway
+inference discriminates and TF-regulon inference does not.
+
 ## Limitations
 
 - The reference and test arms use different cell lines. Genotype and tissue are
@@ -108,4 +125,5 @@ footprints puts both technologies on one axis.
 - Love MI et al. (2014) *Genome Biol* 15:550. (DESeq2)
 - Schubert M et al. (2018) *Nat Commun* 9:20. (PROGENy)
 - Müller-Dott S et al. (2023) *Nucleic Acids Res* 51:10934. (CollecTRI)
+- Garcia-Alonso L et al. (2019) *Genome Res* 29:1363. (DoRothEA)
 - Badia-i-Mompel P et al. (2022) *Bioinform Adv* 2:vbac016. (decoupler)

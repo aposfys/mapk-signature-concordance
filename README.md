@@ -82,12 +82,22 @@ disk stays near 90 MB. Final working set: **66 MB**.
 
 ## Run it
 
+Requires **Python ≥ 3.12** (anndata 0.13 and scanpy 1.12 drop older versions)
+and **R ≥ 4.5**. On macOS `/usr/bin/python3` is still 3.9, so pass an explicit
+interpreter if `python3 --version` reports anything older.
+
 ```bash
-Rscript scripts/microarray/install_deps.R   # R >= 4.5, Bioconductor
+Rscript scripts/microarray/install_deps.R   # Bioconductor packages
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 snakemake --cores 4
 ```
 
-Or let Snakemake provision both environments itself with `--use-conda`.
+The virtualenv must be **activated**, not just installed into: the Python rules
+invoke `python`, so calling `.venv/bin/snakemake` without activating leaves
+`python` unresolved in the rule subshell.
+
+Or let Snakemake provision both environments itself with `--use-conda`, which
+needs no activation.
 
 Methods, rationale, and limitations: [docs/pipeline.md](docs/pipeline.md).

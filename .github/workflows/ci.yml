@@ -16,3 +16,15 @@ jobs:
         run: snakemake --lint
       - name: Validate DAG (dry run)
         run: snakemake -n --cores 1
+
+  deps-resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Pinned requirements resolve and import
+        run: |
+          pip install -r requirements.txt
+          python -c "import decoupler, duckdb, rdkit, pydeseq2, scanpy, anndata"

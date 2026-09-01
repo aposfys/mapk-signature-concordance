@@ -5,7 +5,7 @@ pathway-activity space.
 Rather than testing gene lists for GO enrichment, this infers *pathway activity*
 directly from the log2 fold changes with PROGENy, whose footprint genes were
 trained on perturbation experiments, and transcription-factor activity with
-CollecTRI. Both run through decoupler's univariate linear model.
+CollecTRI (falling back to DoRothEA if its host is down). Both run through decoupler's univariate linear model.
 
 The advantage over over-representation analysis is that the readout is signed
 and directly interpretable: MAPK activity should fall under RAF inhibition in
@@ -14,7 +14,7 @@ contrast is scored on the same footprints as the single-cell contrasts, the two
 platforms become directly comparable on one axis.
 
 Usage: 14_pathway_activity.py <micro_dea_tsv> <tahoe_parquet> <config_yaml>
-                              <out_tsv> <progeny_png> <tf_png>
+                              <progeny_tsv> <tf_tsv> <progeny_png> <tf_png>
 """
 
 import sys
@@ -100,7 +100,8 @@ def heatmap(scores: pd.DataFrame, cfg: dict, title: str, out_png: str, top: int 
 
 
 def main() -> None:
-    micro_tsv, tahoe_pq, config_path, out_tsv, progeny_png, tf_png = sys.argv[1:7]
+    (micro_tsv, tahoe_pq, config_path, out_tsv, tf_tsv, progeny_png,
+     tf_png) = sys.argv[1:8]
     with open(config_path) as fh:
         cfg = yaml.safe_load(fh)
 
@@ -143,10 +144,59 @@ def main() -> None:
             print(f"  {dclass:<14} {geno:<15} median {row['median']:+7.2f} "
                   f"(n={int(row['count'])})")
 
-    tf = score(mat, dc.op.collectri(organism="human"), "CollecTRI")
-    heatmap(tf, cfg, "Transcription-factor activity (CollecTRI), most variable",
+    # CollecTRI is fetched from Zenodo at run time and that host is
+    # intermittently unavailable. PROGENy is the primary readout and is already
+    # written, so a TF-resource outage degrades this step rather than failing
+    # the rule and discarding the pathway results.
+    net, tf_source = None, None
+    for name, fetch in (("CollecTRI", dc.op.collectri), ("DoRothEA", dc.op.dorothea)):
+        try:
+            net, tf_source = fetch(organism="human"), name
+            break
+        except Exception as exc:
+            print(f"  {name} unavailable ({type(exc).__name__}); trying next")
+    if net is None:
+        print("WARNING: no TF regulon resource reachable; skipping TF activity. "
+              "PROGENy results are unaffected.")
+        Path(tf_tsv).write_text("# CollecTRI unavailable at run time\n")
+        fig, ax = plt.subplots(figsize=(7, 3))
+        ax.text(0.5, 0.5, "CollecTRI unavailable at run time",
+                ha="center", va="center")
+        ax.axis("off")
+        fig.savefig(tf_png, dpi=150)
+        print(f"\nWrote {out_tsv}, {progeny_png} (TF step skipped)")
+        return
+
+    print(f"  TF regulons from {tf_source}")
+    tf = score(mat, net, tf_source)
+    tf.to_csv(tf_tsv, sep="\t")
+    heatmap(tf, cfg, f"Transcription-factor activity ({tf_source}), most variable",
             tf_png, 30)
-    print(f"\nWrote {out_tsv}, {progeny_png}, {tf_png}")
+
+    # ETV4/ETV5 are direct ERK-driven transcription factors and were among the
+    # strongest hits in the array reference, so they are the sharpest available
+    # TF-level check on whether inhibition is on-target.
+    mut = set(cfg["tahoe"]["braf_mutant_lines"])
+    cls = {d: "RAF inhibitor" for d in cfg["tahoe"]["raf_inhibitors"]}
+    cls.update({d: "MEK inhibitor" for d in cfg["tahoe"]["mek_inhibitors"]})
+    for factor in ("ETV4", "ETV5", "MYC"):
+        if factor not in tf.columns:
+            continue
+        print(f"\n{factor} activity")
+        print(f"  array reference (A375): {tf.loc[MICRO_LABEL, factor]:+.2f}")
+        rows = tf.drop(index=MICRO_LABEL)
+        summary = pd.DataFrame({
+            "genotype": ["BRAF-V600E" if r.split(" | ")[0] in mut
+                         else "BRAF-WT (NRAS)" for r in rows.index],
+            "drug_class": [cls.get(r.split(" | ")[1], "?") for r in rows.index],
+            "act": rows[factor].to_numpy(),
+        })
+        for (dc_, geno), row in summary.groupby(
+                ["drug_class", "genotype"])["act"].agg(["median", "count"]).iterrows():
+            print(f"  {dc_:<14} {geno:<15} median {row['median']:+7.2f} "
+                  f"(n={int(row['count'])})")
+
+    print(f"\nWrote {out_tsv}, {tf_tsv}, {progeny_png}, {tf_png}")
 
 
 if __name__ == "__main__":
