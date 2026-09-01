@@ -1,0 +1,143 @@
+configfile: "config/config.yaml"
+
+
+# Rules run with the host R installation by default; pass --use-conda to
+# provision the pinned environment in workflow/envs/r-microarray.yaml instead.
+ENV = "envs/r-microarray.yaml"
+
+
+rule all:
+    input:
+        "results/qc/boxplot_raw.png",
+        "results/qc/nuse.png",
+        "results/qc/rle.png",
+        "results/figures/boxplot_normalized.png",
+        "results/figures/pca.png",
+        "results/dea/dea_full.tsv",
+        "results/dea/dea_significant.tsv",
+        "results/figures/volcano.png",
+        "results/figures/sample_dendrogram.png",
+        "results/clustering/samples.nwk",
+        "results/figures/heatmap_top_degs.png",
+        "results/enrichment/go_bp.tsv",
+        "results/enrichment/kegg.tsv",
+
+
+rule download:
+    """Fetch raw CEL files and sample metadata from GEO; assign groups."""
+    output:
+        samples="data/meta/samples.tsv",
+        done=touch("data/raw/.download_done"),
+    params:
+        gse=config["geo_series"],
+        case=config["contrast"]["case_regex"],
+        control=config["contrast"]["control_regex"],
+    log:
+        "logs/download.log",
+    conda:
+        ENV
+    shell:
+        "Rscript scripts/01_download.R {params.gse} data/raw {output.samples}"
+        " '{params.case}' '{params.control}' > {log} 2>&1"
+
+
+rule qc_raw:
+    """Probe-level QC on raw arrays: intensity boxplot, NUSE and RLE."""
+    input:
+        samples="data/meta/samples.tsv",
+        done="data/raw/.download_done",
+    output:
+        boxplot="results/qc/boxplot_raw.png",
+        nuse="results/qc/nuse.png",
+        rle="results/qc/rle.png",
+    log:
+        "logs/qc_raw.log",
+    conda:
+        ENV
+    shell:
+        "Rscript scripts/02_qc_raw.R {input.samples} results/qc > {log} 2>&1"
+
+
+rule normalize:
+    """RMA (background correction + quantile normalization + summarization)."""
+    input:
+        samples="data/meta/samples.tsv",
+        done="data/raw/.download_done",
+    output:
+        expr="results/normalized/expression_matrix.tsv",
+        boxplot="results/figures/boxplot_normalized.png",
+        pca="results/figures/pca.png",
+    log:
+        "logs/normalize.log",
+    conda:
+        ENV
+    shell:
+        "Rscript scripts/03_normalize.R {input.samples} {output.expr}"
+        " {output.boxplot} {output.pca} > {log} 2>&1"
+
+
+rule dea:
+    """limma moderated t-tests with BH correction; annotated results + volcano."""
+    input:
+        expr="results/normalized/expression_matrix.tsv",
+        samples="data/meta/samples.tsv",
+    output:
+        full="results/dea/dea_full.tsv",
+        sig="results/dea/dea_significant.tsv",
+        volcano="results/figures/volcano.png",
+    params:
+        annotation=config["annotation_pkg"],
+        adj_p=config["adj_p"],
+        lfc=config["lfc"],
+    log:
+        "logs/dea.log",
+    conda:
+        ENV
+    shell:
+        "Rscript scripts/04_dea.R {input.expr} {input.samples} {params.annotation}"
+        " {params.adj_p} {params.lfc} {output.full} {output.sig} {output.volcano}"
+        " > {log} 2>&1"
+
+
+rule clustering:
+    """Sample dendrogram (Pearson distance, Newick export) + top-DEG heatmap."""
+    input:
+        expr="results/normalized/expression_matrix.tsv",
+        samples="data/meta/samples.tsv",
+        dea="results/dea/dea_full.tsv",
+    output:
+        dendrogram="results/figures/sample_dendrogram.png",
+        newick="results/clustering/samples.nwk",
+        heatmap="results/figures/heatmap_top_degs.png",
+    params:
+        top_n=config["heatmap_top_n"],
+    log:
+        "logs/clustering.log",
+    conda:
+        ENV
+    shell:
+        "Rscript scripts/05_clustering.R {input.expr} {input.samples} {input.dea}"
+        " {params.top_n} {output.dendrogram} {output.newick} {output.heatmap}"
+        " > {log} 2>&1"
+
+
+rule enrichment:
+    """GO/KEGG over-representation analysis of significant DEGs."""
+    input:
+        dea="results/dea/dea_full.tsv",
+    output:
+        go="results/enrichment/go_bp.tsv",
+        kegg="results/enrichment/kegg.tsv",
+        go_plot="results/figures/go_bp_dotplot.png",
+        kegg_plot="results/figures/kegg_dotplot.png",
+    params:
+        adj_p=config["adj_p"],
+        lfc=config["lfc"],
+    log:
+        "logs/enrichment.log",
+    conda:
+        ENV
+    shell:
+        "Rscript scripts/06_enrichment.R {input.dea} {params.adj_p} {params.lfc}"
+        " {output.go} {output.kegg} {output.go_plot} {output.kegg_plot}"
+        " > {log} 2>&1"

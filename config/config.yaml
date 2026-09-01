@@ -1,0 +1,20 @@
+# Dataset: vemurafenib (PLX4032) vs vehicle-treated A375 melanoma cells,
+# Affymetrix Human Gene 1.0 ST, 3 vs 3 biological replicates.
+geo_series: GSE42872
+
+# Bioconductor annotation package matching the array platform (GPL6244).
+annotation_pkg: hugene10sttranscriptcluster.db
+
+# Sample grouping: regexes matched (case-insensitively) against the GEO
+# sample title + characteristics fields.
+contrast:
+  name: vemurafenib_vs_control
+  case_regex: "vemurafenib|PLX4032|PLX-4032"
+  control_regex: "control|vehicle|DMSO"
+
+# Differential-expression thresholds.
+adj_p: 0.05
+lfc: 1.0
+
+# Number of top DEGs shown in the clustered heatmap.
+heatmap_top_n: 50
