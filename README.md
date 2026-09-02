@@ -46,6 +46,25 @@ shards are clustered by cell line, parquet footers alone locate the 82 relevant
 ones without reading row data; those stream through one at a time (~7 GB) and are
 filtered and deleted as they go, leaving a 69 MB working set.
 
+## Prior work
+
+Tahoe-100M (Zhang et al., bioRxiv 2025) is the atlas this tests against. The closest
+published analysis is Niyonkuru et al. (bioRxiv 2026, CDRPipe), which harmonises Connectivity
+Map microarray profiles with Tahoe-100M pseudobulk and scores them against disease
+signatures, reporting that single-cell-derived profiles recover more annotated therapeutics
+than microarray ones and that the two resources are largely complementary.
+
+That is a **drug-repurposing recall** question over many signatures. This is a **mechanistic
+transfer** question over one: whether a specific drug-response signature reproduces in a
+genotype where the target is mutated and fails where it is not, with a designed negative
+control and an internal positive control proving the assay is not simply insensitive there.
+The designs are different and the results do not overlap, but anyone reading this should read
+CDRPipe first.
+
+The scope limit is worth stating plainly: one signature, one drug class, four cell lines.
+rho 0.300 against 0.104 is a real separation with a designed control behind it, and it is not
+a demonstration that legacy signatures transfer in general.
+
 ## Docs
 
 - [RESULTS.md](docs/RESULTS.md) — full tables, figures, and the negative results
