@@ -28,3 +28,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           python -c "import decoupler, duckdb, rdkit, pydeseq2, scanpy, anndata"
+      - name: Tests
+        run: |
+          pip install pytest
+          pytest -q tests
