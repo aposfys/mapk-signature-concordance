@@ -144,7 +144,7 @@ rule micro_clustering:
 
 
 # ===========================================================================
-# Test arm — Tahoe-100M (2025), 100M cells / 1,100 drugs
+# Test arm: Tahoe-100M (2025), 100M cells, about 1,100 drug perturbations
 # ===========================================================================
 
 rule tahoe_map_shards:

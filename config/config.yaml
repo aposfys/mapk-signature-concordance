@@ -43,7 +43,7 @@ signature_size: 200
 # Independent check of Tahoe's published pseudobulk statistics.
 # One contrast is re-derived from the raw expression matrix with pyDESeq2:
 # C32 (BRAF-V600E) + vemurafenib 5 uM against plate-matched DMSO controls.
-# Chosen as the strongest-effect, smallest-cell-count C32 contrast.
+# Chosen as the drug and top dose closest to the GSE42872 reference.
 # ---------------------------------------------------------------------------
 validation:
   plate: plate3
